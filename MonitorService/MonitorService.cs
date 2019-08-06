@@ -2,6 +2,7 @@
 using System.IO;
 using Kernel.Interface;
 using Kernel.Common;
+using System.Dynamic;
 using Kernel.QueueManager;
 
 using Microsoft.Extensions.DependencyInjection;
@@ -12,6 +13,7 @@ using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Globalization;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using MonitorService.Model;
 
 namespace MonitorService
@@ -19,6 +21,7 @@ namespace MonitorService
     public class MonitorService : IService, IDisposable
     {
         private string _SeviceName = "MonitorService";
+        private readonly ILogger _alarm_logger;
         private readonly ILogger<MonitorService> _logger;
         public cls_MonitorServiceInitial service_initial;
         public bool gw_info_loaded = false;
@@ -34,22 +37,22 @@ namespace MonitorService
         public void Init()
         {
             //Console.WriteLine("Test MonitorService Init()");
-            if(LoadInitial())
+            if (LoadInitial())
             {
                 Console.WriteLine("Load Initial File successful");
-                if(LoadGatewayConfig())
+                if (LoadGatewayConfig())
                 {
                     gw_info_loaded = true;
                 }
             }
-            
-            if(gw_info_loaded)
+
+            if (gw_info_loaded)
             {
-                if(BuildMonitorInformationFromFile())
+                if (BuildMonitorInformationFromFile())
                 {
                     if (this.service_initial.db_enabled)
                     {
-                        if(ConnectDatabase())
+                        if (ConnectDatabase())
                         {
                             BuildMonitorInformationToDB();
                         }
@@ -57,6 +60,18 @@ namespace MonitorService
                 }
             }
 
+            /*
+            dynamic d = JObject.Parse("{str:'string', array: [1,2,3,4,5,6]}");
+            object tmp = (object)d;
+            Console.WriteLine("Proper Count: " + tmp.GetType().GetProperties().Count().ToString());
+            tmp.GetType().GetMembers();
+            foreach (var abc in tmp.GetType().GetProperties())
+            {
+                Console.WriteLine("Proper Name: " + abc.Name.ToString());
+                Console.WriteLine("Proper Type: " + abc.PropertyType.ToString());
+                Console.WriteLine("Member Name: " + abc.MemberType.ToString());
+            }
+            */
         }
 
         public void Dispose()
@@ -66,12 +81,13 @@ namespace MonitorService
 
         public MonitorService(ILoggerFactory loggerFactory, IServiceProvider serviceProvider)
         {
-            _logger = loggerFactory.CreateLogger<MonitorService>();
+            _alarm_logger = loggerFactory.CreateLogger("AlarmHistory");
+            _logger = loggerFactory.CreateLogger<MonitorService>(); ;
         }
 
         public void ReceiveHeartBeat(xmlMessage InputData)
         {
-            if(!gw_info_loaded)
+            if (!gw_info_loaded)
             {
                 return;
             }
@@ -80,6 +96,9 @@ namespace MonitorService
             string[] Topic = InputData.MQTTTopic.Split('/');    // /IEW/GateWay/Device/Status/HeartBeat
             string GateWayID = Topic[2].ToString();
             string DeviceID = Topic[3].ToString();
+
+            cls_LogMessage log_msg = new cls_LogMessage("MQTT", GateWayID, DeviceID, "Receive Heart Beat");
+            _logger.LogInformation(log_msg.get_log_message());
 
             cls_HeartBeat hb = new cls_HeartBeat();
             hb = JsonConvert.DeserializeObject<cls_HeartBeat>(InputData.MQTTPayload.ToString());
@@ -90,7 +109,15 @@ namespace MonitorService
                 mdv.device_status = hb.Status;
                 mdv.hb_status = hb.Status;
                 mdv.hb_report_time = DateTime.ParseExact(hb.HBDatetime, "yyyyMMddHHmmssfff", CultureInfo.InvariantCulture);
+
+                log_msg.message = "HB Status = " + hb.Status;
             }
+            else
+            {
+                log_msg.message = "Cannot find monitor information!";
+            }
+
+            _logger.LogInformation(log_msg.get_log_message());
 
             SaveMonitorInformation(GateWayID, DeviceID);
         }
@@ -106,6 +133,9 @@ namespace MonitorService
             string[] Topic = InputData.MQTTTopic.Split('/');    // /IEW/GateWay/Device/Cmd/Start/Ack
             string GateWayID = Topic[2].ToString();
             string DeviceID = Topic[3].ToString();
+
+            cls_LogMessage log_msg = new cls_LogMessage("MQTT", GateWayID, DeviceID, "Receive Start Ack");
+            _logger.LogInformation(log_msg.get_log_message());
 
             cls_StartAck sc = new cls_StartAck();
             sc = JsonConvert.DeserializeObject<cls_StartAck>(InputData.MQTTPayload.ToString());
@@ -125,7 +155,15 @@ namespace MonitorService
                     mdv.hb_status = "Down";
                     mdv.hb_report_time = DateTime.ParseExact(sc.Trace_ID, "yyyyMMddHHmmssfff", CultureInfo.InvariantCulture);
                 }
+
+                log_msg.message = "Start Ack Result = " + sc.Cmd_Result;
             }
+            else
+            {
+                log_msg.message = "Cannot find monitor information!";
+            }
+
+            _logger.LogInformation(log_msg.get_log_message());
 
             SaveMonitorInformation(GateWayID, DeviceID);
         }
@@ -141,6 +179,9 @@ namespace MonitorService
             string[] Topic = InputData.MQTTTopic.Split('/');    // /IEW/GateWay/Device/Cmd/ReadData/Ack
             string GateWayID = Topic[2].ToString();
             string DeviceID = Topic[3].ToString();
+
+            cls_LogMessage log_msg = new cls_LogMessage("MQTT", GateWayID, DeviceID, "Receive ReadData Ack");
+            _logger.LogInformation(log_msg.get_log_message());
 
             cls_ReadDataAck rc = new cls_ReadDataAck();
             rc = JsonConvert.DeserializeObject<cls_ReadDataAck>(InputData.MQTTPayload.ToString());
@@ -161,7 +202,15 @@ namespace MonitorService
                     mdv.hb_status = "Down";
                     mdv.hb_report_time = DateTime.ParseExact(rc.Trace_ID, "yyyyMMddHHmmssfff", CultureInfo.InvariantCulture);
                 }
+
+                log_msg.message = "ReadData Ack Result = " + rc.Cmd_Result;
             }
+            else
+            {
+                log_msg.message = "Cannot find monitor information!";
+            }
+
+            _logger.LogInformation(log_msg.get_log_message());
 
             SaveMonitorInformation(GateWayID, DeviceID);
         }
@@ -178,6 +227,9 @@ namespace MonitorService
             string GateWayID = Topic[2].ToString();
             string DeviceID = Topic[3].ToString();
 
+            cls_LogMessage log_msg = new cls_LogMessage("MQTT", GateWayID, DeviceID, "Receive Config Ack");
+            _logger.LogInformation(log_msg.get_log_message());
+
             cls_ConfigAck ca = new cls_ConfigAck();
             ca = JsonConvert.DeserializeObject<cls_ConfigAck>(InputData.MQTTPayload.ToString());
 
@@ -193,13 +245,23 @@ namespace MonitorService
                 {
                     mdv.iotclient_status = "Off";
                 }
+
+                log_msg.message = "Config Ack Result = " + ca.Cmd_Result;
             }
+            else
+            {
+                log_msg.message = "Cannot find monitor information!";
+            }
+
+            _logger.LogInformation(log_msg.get_log_message());
 
             SaveMonitorInformation(GateWayID, DeviceID);
         }
 
         public void ReceiveAlarm(xmlMessage InputData)
         {
+            //_alarm_logger.LogWarning("Receive Alarm message!!");
+
             if (!gw_info_loaded)
             {
                 return;
@@ -213,6 +275,11 @@ namespace MonitorService
             cls_Alarm ca = new cls_Alarm();
             ca = JsonConvert.DeserializeObject<cls_Alarm>(InputData.MQTTPayload.ToString());
 
+            cls_LogMessage log_msg = new cls_LogMessage("Alarm", GateWayID, DeviceID, ca.AlarmDesc);
+            log_msg.alarm_app = ca.AlarmApp;
+            log_msg.alarm_code = ca.AlarmCode;
+            log_msg.alarm_level = ca.AlarmLevel;
+
             cls_Monitor_Device_Info mdv = this.monitor_manager.device_list.Where(o => o.gateway_id == GateWayID && o.device_id == DeviceID).FirstOrDefault();
             if (mdv != null)
             {
@@ -221,6 +288,12 @@ namespace MonitorService
                 mdv.last_alarm_datetime = DateTime.ParseExact(ca.DateTime, "yyyyMMddHHmmssfff", CultureInfo.InvariantCulture);
                 mdv.last_alarm_message = ca.AlarmDesc;
             }
+            else
+            {
+                log_msg.message = "Cannot find monitor information!";
+            }
+
+            _alarm_logger.LogWarning(log_msg.get_log_message());
 
             SaveMonitorInformation(GateWayID, DeviceID);
         }
@@ -337,9 +410,12 @@ namespace MonitorService
             {
                 if (!File.Exists("C:\\Gateway\\Config\\Monitor_Service_Init.json"))
                 {
-                    Console.WriteLine("No Service Initial file exists!");
+                    //Console.WriteLine("No Service Initial file exists!");
+                    cls_LogMessage log_msg = new cls_LogMessage("INFO", "MonitorService", "LoadInitial", "No Service Initial file exists!");
+                    _logger.LogInformation(log_msg.get_log_message());
+
                     this.service_initial = new cls_MonitorServiceInitial();
-                    return true;
+                    return false;
                 }
 
                 StreamReader inputFile = new StreamReader("C:\\Gateway\\Config\\Monitor_Service_Init.json");
@@ -350,7 +426,10 @@ namespace MonitorService
 
                 if (this.service_initial == null)
                 {
-                    Console.WriteLine("No Initial config exists!");
+                    //Console.WriteLine("No Initial config exists!");
+                    cls_LogMessage log_msg = new cls_LogMessage("INFO", "MonitorService", "LoadInitial", "No Initial config exists!");
+                    _logger.LogInformation(log_msg.get_log_message());
+
                     return false;
                 }
 
@@ -358,7 +437,9 @@ namespace MonitorService
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Service  Initial file loading error -> " + ex.Message, "Error");
+                //Console.WriteLine("Service  Initial file loading error -> " + ex.Message);
+                cls_LogMessage log_msg = new cls_LogMessage("ERROR", "MonitorService", "LoadInitial", "Exception: " + ex.Message);
+                _logger.LogInformation(log_msg.get_log_message());
                 return false;
             }
 
@@ -371,8 +452,10 @@ namespace MonitorService
             {
                 if (!File.Exists(this.service_initial.ccs_gateway_config_path))
                 {
-                    Console.WriteLine("No Gateway Congatefig file exists!");
-                    
+                    //Console.WriteLine("No Gateway Congatefig file exists!");
+                    cls_LogMessage log_msg = new cls_LogMessage("INFO", "MonitorService", "LoadGatewayConfig", "No Gateway Congatefig file exists!");
+                    _logger.LogInformation(log_msg.get_log_message());
+
                     return false;
                 }
 
@@ -384,7 +467,10 @@ namespace MonitorService
 
                 if (this.gw_manager.gateway_list == null)
                 {
-                    Console.WriteLine("No Gateway config exists!");
+                    //Console.WriteLine("No Gateway config exists!");
+                    cls_LogMessage log_msg = new cls_LogMessage("INFO", "MonitorService", "LoadGatewayConfig", "No Gateway config exists!");
+                    _logger.LogInformation(log_msg.get_log_message());
+
                     return false;
                 }
 
@@ -392,7 +478,10 @@ namespace MonitorService
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Gateway Config file loading error -> " + ex.Message, "Error");
+                //Console.WriteLine("Gateway Config file loading error -> " + ex.Message);
+                cls_LogMessage log_msg = new cls_LogMessage("ERROR", "MonitorService", "LoadGatewayConfig", "Exception: " + ex.Message);
+                _logger.LogInformation(log_msg.get_log_message());
+
                 return false;
             }
 
@@ -410,6 +499,8 @@ namespace MonitorService
                 {
                     //FileStream fs = File.Create(this.service_initial.monitor_status_path);
                     //fs.Close();
+                    cls_LogMessage log_msg = new cls_LogMessage("INFO", "MonitorService", "BuildMInfoFromFile", "Monitor Status file does not exist");
+                    _logger.LogInformation(log_msg.get_log_message());
 
                     if (this.gw_manager.gateway_list.Count > 0)
                     {
@@ -438,6 +529,9 @@ namespace MonitorService
                 }
                 else
                 {
+                    cls_LogMessage log_msg = new cls_LogMessage("INFO", "MonitorService", "BuildMInfoFromFile", "Monitor Status file exists");
+                    _logger.LogInformation(log_msg.get_log_message());
+
                     StreamReader inputFile = new StreamReader(this.service_initial.monitor_status_path);
                     json_string = inputFile.ReadToEnd();
                     inputFile.Close();
@@ -452,7 +546,7 @@ namespace MonitorService
                                 foreach (cls_Device_Info di in gi.device_info)
                                 {
                                     cls_Monitor_Device_Info mdi = this.monitor_manager.device_list.Where(p => (p.gateway_id == gi.gateway_id) && (p.device_id == di.device_name)).FirstOrDefault();
-                                    if(mdi == null)
+                                    if (mdi == null)
                                     {
                                         cls_Monitor_Device_Info tmp = new cls_Monitor_Device_Info();
                                         tmp.gateway_id = gi.gateway_id;
@@ -481,7 +575,10 @@ namespace MonitorService
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Build Monitor Status file failed -> " + ex.Message, "Error");
+                //Console.WriteLine("Build Monitor Status file failed -> " + ex.Message);
+                cls_LogMessage log_msg = new cls_LogMessage("ERROR", "MonitorService", "BuildMInfoFromFile", "Exception: " + ex.Message);
+                _logger.LogInformation(log_msg.get_log_message());
+
                 return false;
             }
         }
@@ -490,23 +587,32 @@ namespace MonitorService
         {
             try
             {
-                System.Diagnostics.Debug.Print("DB COnnect Start" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"));
+                //System.Diagnostics.Debug.Print("DB COnnect Start" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"));
+                cls_LogMessage log_msg = new cls_LogMessage("INFO", "MonitorService", "ConnectDatabase", "DB Connect Start...");
+                _logger.LogInformation(log_msg.get_log_message());
 
                 this.db = new IOT_DbContext(this.service_initial.db_info.db_type, this.service_initial.db_info.connection_string);
 
-                System.Diagnostics.Debug.Print("DB COnnect End & init Start" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"));
+                //System.Diagnostics.Debug.Print("DB COnnect End & init Start" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"));
+                log_msg.message = "DB Connect End & init Start";
+                _logger.LogInformation(log_msg.get_log_message());
 
                 this.db.ChangeTracker.AutoDetectChangesEnabled = false;
                 this.db.ChangeTracker.LazyLoadingEnabled = false;
                 this.db.IOT_STATUS_MONITOR.FirstOrDefault();
 
-                System.Diagnostics.Debug.Print("DB COnnect init End" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"));
+                //System.Diagnostics.Debug.Print("DB COnnect init End" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"));
+                log_msg.message = "DB Init End";
+                _logger.LogInformation(log_msg.get_log_message());
 
                 return true;
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
-                Console.WriteLine("Connect Database error -> " + ex.Message);
+                //Console.WriteLine("Connect Database error -> " + ex.Message);
+                cls_LogMessage log_msg = new cls_LogMessage("ERROR", "MonitorService", "ConnectDatabase", "Exception: " + ex.Message);
+                _logger.LogInformation(log_msg.get_log_message());
+
                 return false;
             }
         }
@@ -517,11 +623,18 @@ namespace MonitorService
             {
                 if (this.monitor_manager.device_list.Count > 0)
                 {
-                    System.Diagnostics.Debug.Print("BuildMonitorInformationToDB() --> Start to Insert IOT_STATUS_MONITOR:  " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"));
+                    //System.Diagnostics.Debug.Print("BuildMonitorInformationToDB() --> Start to Insert IOT_STATUS_MONITOR:  " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"));
+                    cls_LogMessage log_msg = new cls_LogMessage("INFO", "MonitorService", "BuildMInfoToDB", "Delete IOT_STATUS_MONITOR...");
+                    _logger.LogInformation(log_msg.get_log_message());
 
                     var tmp = this.db.IOT_STATUS_MONITOR.Where(x => x.id > 0);
                     this.db.IOT_STATUS_MONITOR.RemoveRange(tmp);
                     this.db.SaveChanges();
+                    log_msg.message = "Delete IOT_STATUS_MONITOR finished";
+                    _logger.LogInformation(log_msg.get_log_message());
+
+                    log_msg.message = "Start to Insert IOT_STATUS_MONITOR...";
+                    _logger.LogInformation(log_msg.get_log_message());
 
                     foreach (cls_Monitor_Device_Info mdi in this.monitor_manager.device_list)
                     {
@@ -552,12 +665,16 @@ namespace MonitorService
                     }
                     this.db.SaveChanges();
 
-                    System.Diagnostics.Debug.Print("BuildMonitorInformationToDB() --> End to Insert IOT_STATUS_MONITOR:  " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"));
+                    log_msg.message = "Insert IOT_STATUS_MONITOR finished";
+                    _logger.LogInformation(log_msg.get_log_message());
+                    //System.Diagnostics.Debug.Print("BuildMonitorInformationToDB() --> End to Insert IOT_STATUS_MONITOR:  " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"));
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine("BuildMonitorInformationToDB error -> " + ex.Message);
+                //Console.WriteLine("BuildMonitorInformationToDB error -> " + ex.Message);
+                cls_LogMessage log_msg = new cls_LogMessage("ERROR", "MonitorService", "BuildMInfoToDB", "Exception: " + ex.Message);
+                _logger.LogInformation(log_msg.get_log_message());
             }
         }
 
@@ -570,7 +687,7 @@ namespace MonitorService
             output.Write(json_string);
             output.Close();
 
-            if(this.service_initial.db_enabled)
+            if (this.service_initial.db_enabled)
             {
                 UpdateMonitorDB(gateway_id, device_id);
             }
@@ -580,7 +697,7 @@ namespace MonitorService
         {
             var db_record = this.db.IOT_STATUS_MONITOR.Where(p => (p.gateway_id == gateway_id) && (p.device_id == device_id)).FirstOrDefault();
             cls_Monitor_Device_Info mdi = this.monitor_manager.device_list.Where(o => (o.gateway_id == gateway_id) && (o.device_id == device_id)).FirstOrDefault();
-            if((db_record != null) && (mdi != null))
+            if ((db_record != null) && (mdi != null))
             {
                 db_record.device_status = mdi.device_status;
                 db_record.iotclient_status = mdi.iotclient_status;
@@ -593,6 +710,12 @@ namespace MonitorService
                 db_record.last_alarm_message = mdi.last_alarm_message;
                 this.db.IOT_STATUS_MONITOR.Update(db_record);
                 this.db.SaveChanges();
+            }
+            else
+            {
+                string msg = String.Format("[{0}][{1}]", gateway_id, device_id) + " query data error";
+                cls_LogMessage log_msg = new cls_LogMessage("ERROR", "MonitorService", "UpdateMonitorDB", msg);
+                _logger.LogInformation(log_msg.get_log_message());
             }
         }
     }

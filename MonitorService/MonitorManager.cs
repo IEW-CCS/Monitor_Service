@@ -231,4 +231,45 @@ namespace MonitorService
     }
     #endregion
 
+    #region Class to define the log message format
+    public class cls_LogMessage
+    {
+        public string log_type { get; set; }
+        public string cat_id { get; set; }
+        public string subcat_id { get; set; }
+        public string alarm_code { get; set; }
+        public string alarm_level { get; set; }
+        public string alarm_app { get; set; }
+        public string message { get; set; }
+
+        public cls_LogMessage(string type, string cat, string sub_cat, string msg)
+        {
+            this.cat_id = cat;
+            this.subcat_id = sub_cat;
+            this.message = msg;
+            this.log_type = type;
+        }
+
+        public string get_log_message()
+        {
+            string msg = "";
+
+            switch(this.log_type)
+            {
+                case "Alarm":
+                    msg = String.Format("[{0,-15}][{1,-20}][{2, -15}][{3, -10}][{4, -10}] {5, -40}", this.cat_id, this.subcat_id, this.alarm_app, this.alarm_code, this.alarm_level, this.message);
+                    break;
+
+                default:
+                    this.alarm_level = this.log_type;
+                    msg = String.Format("[{0,-15}][{1,-20}][{2, -10}] {3, -40}", this.cat_id, this.subcat_id, this.alarm_level, this.message);
+                    break;
+            }
+            
+
+            return msg;
+        }
+    }
+    #endregion
+
 }

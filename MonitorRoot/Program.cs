@@ -118,7 +118,6 @@ namespace Dotnet_JOB_Client
                 }
             }
         }
-  }
-
+    }
 }
 
