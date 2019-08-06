@@ -39,7 +39,7 @@ namespace MonitorService
             //Console.WriteLine("Test MonitorService Init()");
             if (LoadInitial())
             {
-                Console.WriteLine("Load Initial File successful");
+                //Console.WriteLine("Load Initial File successful");
                 if (LoadGatewayConfig())
                 {
                     gw_info_loaded = true;
@@ -408,10 +408,11 @@ namespace MonitorService
         {
             try
             {
+                cls_LogMessage log_msg = new cls_LogMessage("INFO", "MonitorService", "LoadInitial", "No Service Initial file exists!");
                 if (!File.Exists("C:\\Gateway\\Config\\Monitor_Service_Init.json"))
                 {
                     //Console.WriteLine("No Service Initial file exists!");
-                    cls_LogMessage log_msg = new cls_LogMessage("INFO", "MonitorService", "LoadInitial", "No Service Initial file exists!");
+                    log_msg.message = "No Service Initial file exists!";
                     _logger.LogInformation(log_msg.get_log_message());
 
                     this.service_initial = new cls_MonitorServiceInitial();
@@ -427,13 +428,17 @@ namespace MonitorService
                 if (this.service_initial == null)
                 {
                     //Console.WriteLine("No Initial config exists!");
-                    cls_LogMessage log_msg = new cls_LogMessage("INFO", "MonitorService", "LoadInitial", "No Initial config exists!");
+                    log_msg.message = "No Initial config exists!";
                     _logger.LogInformation(log_msg.get_log_message());
 
                     return false;
                 }
 
                 inputFile.Close();
+
+                log_msg.message = "Load Initial File Successful";
+                _logger.LogInformation(log_msg.get_log_message());
+
             }
             catch (Exception ex)
             {
@@ -450,10 +455,11 @@ namespace MonitorService
         {
             try
             {
+                cls_LogMessage log_msg = new cls_LogMessage("INFO", "MonitorService", "LoadGatewayConfig", "");
                 if (!File.Exists(this.service_initial.ccs_gateway_config_path))
                 {
                     //Console.WriteLine("No Gateway Congatefig file exists!");
-                    cls_LogMessage log_msg = new cls_LogMessage("INFO", "MonitorService", "LoadGatewayConfig", "No Gateway Congatefig file exists!");
+                    log_msg.message = "No Gateway Congatefig file exists!";
                     _logger.LogInformation(log_msg.get_log_message());
 
                     return false;
@@ -468,13 +474,16 @@ namespace MonitorService
                 if (this.gw_manager.gateway_list == null)
                 {
                     //Console.WriteLine("No Gateway config exists!");
-                    cls_LogMessage log_msg = new cls_LogMessage("INFO", "MonitorService", "LoadGatewayConfig", "No Gateway config exists!");
+                    log_msg.message = "No Gateway config exists!";
                     _logger.LogInformation(log_msg.get_log_message());
 
                     return false;
                 }
 
                 inputFile.Close();
+
+                log_msg.message = "Load Gateway Config File Successful";
+                _logger.LogInformation(log_msg.get_log_message());
             }
             catch (Exception ex)
             {
@@ -495,11 +504,13 @@ namespace MonitorService
             {
                 string json_string;
 
+                cls_LogMessage log_msg = new cls_LogMessage("INFO", "MonitorService", "BuildMInfoFromFile", "");
+
                 if (!File.Exists(this.service_initial.monitor_status_path))
                 {
                     //FileStream fs = File.Create(this.service_initial.monitor_status_path);
                     //fs.Close();
-                    cls_LogMessage log_msg = new cls_LogMessage("INFO", "MonitorService", "BuildMInfoFromFile", "Monitor Status file does not exist");
+                    log_msg.message = "Monitor Status file does not exist";
                     _logger.LogInformation(log_msg.get_log_message());
 
                     if (this.gw_manager.gateway_list.Count > 0)
@@ -529,7 +540,7 @@ namespace MonitorService
                 }
                 else
                 {
-                    cls_LogMessage log_msg = new cls_LogMessage("INFO", "MonitorService", "BuildMInfoFromFile", "Monitor Status file exists");
+                    log_msg.message = "Monitor Status file exists";
                     _logger.LogInformation(log_msg.get_log_message());
 
                     StreamReader inputFile = new StreamReader(this.service_initial.monitor_status_path);
@@ -571,6 +582,10 @@ namespace MonitorService
                 StreamWriter output = new StreamWriter(this.service_initial.monitor_status_path);
                 output.Write(json_string);
                 output.Close();
+
+                log_msg.message = "Build Monitor Info Successful";
+                _logger.LogInformation(log_msg.get_log_message());
+
                 return true;
             }
             catch (Exception ex)
